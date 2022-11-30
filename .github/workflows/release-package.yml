@@ -25,4 +25,4 @@ jobs:
           npm run build:all
       - name: publish-npm
         run: |
-          npm publish --access public
+          npm publish
