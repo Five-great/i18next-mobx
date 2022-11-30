@@ -1,0 +1,8 @@
+.github
+.git
+.prettierrc
+*.js
+jest-playwright.config.js
+jest.config.ts
+tsconfig.build.cjs.json
+tsconfig.build.json
