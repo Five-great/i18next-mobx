@@ -1,14 +1,14 @@
 {
   "name": "i18next-mobx",
-  "version": "0.0.0-alpha.2",
+  "version": "0.0.0-alpha.3",
   "description": "A management scheme for i18nxet mobx",
   "main": "dist/index.js",
   "types": "dist/esm/index.d.ts",
   "module": "dist/esm/index.js",
   "scripts": {
     "start": "ts-node ./src/index.ts -P tsconfig.json --no-cache",
-    "build:esm": "tsc -p tsconfig.build.json",
-    "build:cjs": "tsc -p tsconfig.build.cjs.json && echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
+    "build:esm": "rm -rf dist/esm && tsc -p tsconfig.build.json",
+    "build:cjs": "rm -rf dist/cjs && tsc -p tsconfig.build.cjs.json && echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
     "build": "tsc -P tsconfig.json",
     "build:all": "npm run e2e && npm run build && npm run build:esm && npm run build:cjs",
     "format": "prettier --write \"src/**/*.ts\" \"src/**/*.js\"",
