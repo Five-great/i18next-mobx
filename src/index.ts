@@ -9,6 +9,7 @@ const i18next = (_i18next as unknown as i18n)
 interface I18nProxy {
     changeLanguage: Function;
     currentLanguage: string;
+   
     t: Function;
     addResourceBundle(lng: string, ns: string, resources: any):I18nProxy;
     hasResourceBundle(lng: string, ns: string):boolean;
@@ -17,6 +18,7 @@ interface I18nProxy {
 
 interface I18NextExtendsProxy extends i18n {
     currentLanguage: string;
+    changeCurrentLanguage: Function;
     i18nMap: Record<string, Record<string, string>>;
     
 }
@@ -37,7 +39,12 @@ export class I18NextMobxProxy<T=i18n>{
   
     @observable
     currentLanguage: string = '';
-  
+
+    @action 
+    changeCurrentLanguage=(lng: string) => {
+      this.currentLanguage = lng;
+    }
+
     @action
     changeLanguage = async (lng: string, ns: string = 'translation') => {
       if (!(this.target as i18n).hasResourceBundle(lng, ns)) {
@@ -60,6 +67,7 @@ export class I18NextMobxProxy<T=i18n>{
         | undefined,
     ) => {
       const keyIdx = Array.isArray(key) ? key.join('=') : key;
+
       this.i18nMap[this.currentLanguage] ||= {};
       this.i18nMap[this.currentLanguage][keyIdx] ||= (this.target as I18nProxy).t(key, defaultValue, options) 
 
@@ -86,7 +94,7 @@ const loadLanguage = async (lng: string) => {
  return  await loadFetch(_loadPath.replace(/\{\{lng\}\}/gi,lng));
 };
 
-const loadServerLanguage = (lng: string,ns:string="translation") => {
+const loadServerLanguageData = (lng: string,ns:string="translation") => {
   return new Promise(resolve => {
     let _loadPath:string ="locales/{{lng}}.json";
     const  optionsLoadPath = i18next.options?.backend&&(i18next.options.backend as any).addPath
@@ -98,24 +106,19 @@ const loadServerLanguage = (lng: string,ns:string="translation") => {
 
     if(isExternalUrl(_loadPath)){
       loadFetch(_loadPath).then((data)=>{
-        i18nProxy.addResourceBundle(lng, ns, data ||{});
-        i18next.changeLanguage(lng);
-        i18nProxy.currentLanguage = lng;
-        resolve(lng);
+        resolve(data);
       })
     }else{
+      let data = "{}"
       try {
         const { readFileSync } = require('fs');
         const path = require('path');
-        const data = readFileSync(
+         data = readFileSync(
           path.join(process.cwd(), 'public', _loadPath.replace(/\{\{lng\}\}/gi,lng)),
           'utf-8',
         );
-        i18nProxy.addResourceBundle(lng, ns, JSON.parse(data || '{}'));
       } catch (error) {}
-      i18next.changeLanguage(lng);
-      i18nProxy.currentLanguage = lng;
-      resolve(lng);
+      resolve(JSON.parse(data));
     }
   });
 };
@@ -126,6 +129,9 @@ function defaultSetup(){
       if (!i18next.hasResourceBundle(lng, 'translation')) {
         loadLanguage(lng).then(data => {
           i18next.addResourceBundle(lng, 'translation', data);
+          i18next.changeLanguage(lng).then(()=>{
+            i18nProxy.changeCurrentLanguage(lng)
+          })
         });
         i18next.off('languageChanged');
       }
@@ -151,6 +157,14 @@ function setI18nConfiguration(HeadersData?: I18NextHeaders) {
     };
   }
 }
+const loadServerLanguage = async(lng:string)=>{
+  if (lng&&!i18next.hasResourceBundle(lng, 'translation')) {
+    let data = await loadServerLanguageData(lng)
+    i18next.addResourceBundle(lng, 'translation',data)
+}
+  await i18next.changeLanguage(lng)
+  i18nProxy.changeCurrentLanguage(lng)
+}
 
 export function getSeverLanguage() {
   return (process as ProcessI18NextProxy).I18NextProxy?.severLanguage;
@@ -160,8 +174,18 @@ export const withNextServerI18n = (nextAppComponent: {
   ({ Component, pageProps });
   getInitialProps?: any;
 }) => {
+
+  const newNextAppComponent:{({ Component, pageProps });getInitialProps?: any;} =(function(_nextAppComponent){
+    return  function(){
+      if(isServer()){
+        const lng =  arguments[0].router.query.i18nextLanguage||i18next.language
+        loadServerLanguage(lng)
+      }
+      return _nextAppComponent.apply(_nextAppComponent, arguments);
+    }
+  }(nextAppComponent))
   if (nextAppComponent.getInitialProps) {
-    nextAppComponent.getInitialProps = (function (_getInitialProps: {
+    newNextAppComponent.getInitialProps = (function (_getInitialProps: {
       apply: (
         arg0: {
           ({ Component, pageProps });
@@ -171,26 +195,23 @@ export const withNextServerI18n = (nextAppComponent: {
       ) => void;
     }) {
       return function () {
-        const HeadersData = arguments[0].ctx.req?.headers;
-        setI18nConfiguration(HeadersData);
         const arg = arguments;
-        const lng = getSeverLanguage();
-
+        const HeadersData = arg[0].ctx.req?.headers;
+        setI18nConfiguration(HeadersData);
+        arg[0].ctx.query.i18nextLanguage = getSeverLanguage();
         return new Promise(resolve => {
-          loadServerLanguage(lng);
           resolve(_getInitialProps.apply(nextAppComponent, arg));
         });
       };
     })(nextAppComponent.getInitialProps);
   } else {
-    nextAppComponent.getInitialProps = async ({
+    newNextAppComponent.getInitialProps = async ({
       Component,
       ctx,
     }) => {
       const HeadersData = ctx.req?.headers;
       setI18nConfiguration(HeadersData);
-      const lng = getSeverLanguage();
-      await loadServerLanguage(lng);
+      ctx.query.i18nextLanguage = getSeverLanguage();
       let pageProps = {};
       if (Component.getInitialProps) {
         pageProps = await Component.getInitialProps(ctx);
@@ -198,9 +219,14 @@ export const withNextServerI18n = (nextAppComponent: {
       return { pageProps };
     };
   }
-  return nextAppComponent;
+  
+
+  return newNextAppComponent;
 };
 
+export {
+  isServer,
+}
 export const t = function (
   key: string | string[],
   defaultValue?: string | undefined,

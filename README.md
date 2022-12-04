@@ -9,9 +9,11 @@
 [![release candidate](https://img.shields.io/npm/v/i18next-mobx.svg)](https://www.npmjs.com/package/i18next-mobx)&nbsp;
 [![i18next Version](https://img.shields.io/badge/i18next-=>20.0.6-green.svg)](http://github.com/i18next)&nbsp; 
 [![Mobx Version](https://img.shields.io/badge/mobx-=>5.x.x-green.svg)](https://github.com/mobxjs/mobx)&nbsp; 
-[![GitHub license](https://img.shields.io/github/license/i18next-mobx.svg)](https://github.com/five-great/i18next-mobx/blob/main/LICENSE)&nbsp;
+[![GitHub license](https://img.shields.io/github/license/five-great/i18next-mobx.svg)](https://github.com/five-great/i18next-mobx/blob/main/LICENSE)&nbsp;
 
+## Demo 
 
+[React Demo](https://codesandbox.io/embed/i18next-mobx-react-demo-99bs5y?fontsize=14&hidenavigation=1&theme=dark&view=preview)
 
 ## 下载
 
