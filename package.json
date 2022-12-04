@@ -1,6 +1,6 @@
 {
   "name": "i18next-mobx",
-  "version": "0.0.0-alpha.3",
+  "version": "0.0.0-alpha.4",
   "description": "A management scheme for i18nxet mobx",
   "main": "dist/index.js",
   "types": "dist/esm/index.d.ts",
