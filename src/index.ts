@@ -1,15 +1,15 @@
 import { i18n, TOptions } from 'i18next';
 import * as _i18next from 'i18next';
-import { observable, action } from 'mobx';
+import { observable, action} from 'mobx';
 
-import { isServer , isFunction,mixin, isExternalUrl, loadFetch, parseLanguageHeader, parseLanguageHeaderCookie} from "./tools"
+import { isServer , isFunction,mixin,loadFetch} from "./tools"
 
-const i18next = (_i18next as unknown as i18n)
+ const i18next = (_i18next.default as unknown as i18n)||(_i18next as unknown as i18n)
 
 interface I18nProxy {
     changeLanguage: Function;
     currentLanguage: string;
-   
+    init: Function;
     t: Function;
     addResourceBundle(lng: string, ns: string, resources: any):I18nProxy;
     hasResourceBundle(lng: string, ns: string):boolean;
@@ -23,15 +23,6 @@ interface I18NextExtendsProxy extends i18n {
     
 }
 
-interface ProcessI18NextProxy extends NodeJS.Process {
-  I18NextProxy?: { severLanguage: string };
-}
-
-interface I18NextHeaders {
-  'accept-language'?: string;
-  cookie?: string;
-}
-
 export class I18NextMobxProxy<T=i18n>{
     target: T|I18nProxy;
   
@@ -42,6 +33,7 @@ export class I18NextMobxProxy<T=i18n>{
 
     @action 
     changeCurrentLanguage=(lng: string) => {
+      if(globalThis.document)document.documentElement.lang = lng;
       this.currentLanguage = lng;
     }
 
@@ -52,7 +44,7 @@ export class I18NextMobxProxy<T=i18n>{
         (this.target as i18n).addResourceBundle(lng, ns, data);
       }
       await (this.target as I18nProxy).changeLanguage(lng);
-      this.currentLanguage = lng;
+      this.changeCurrentLanguage(i18next.language);
     }
 
     t = (
@@ -94,139 +86,32 @@ const loadLanguage = async (lng: string) => {
  return  await loadFetch(_loadPath.replace(/\{\{lng\}\}/gi,lng));
 };
 
-const loadServerLanguageData = (lng: string,ns:string="translation") => {
-  return new Promise(resolve => {
-    let _loadPath:string ="locales/{{lng}}.json";
-    const  optionsLoadPath = i18next.options?.backend&&(i18next.options.backend as any).addPath
-
-    if(optionsLoadPath){
-      isFunction(optionsLoadPath)?( _loadPath = optionsLoadPath(lng,"translation")):(_loadPath = optionsLoadPath);
-    }
-     _loadPath = _loadPath.replace(/\{\{lng\}\}/gi,lng)
-
-    if(isExternalUrl(_loadPath)){
-      loadFetch(_loadPath).then((data)=>{
-        resolve(data);
-      })
-    }else{
-      let data = "{}"
-      try {
-        const { readFileSync } = require('fs');
-        const path = require('path');
-         data = readFileSync(
-          path.join(process.cwd(), 'public', _loadPath.replace(/\{\{lng\}\}/gi,lng)),
-          'utf-8',
-        );
-      } catch (error) {}
-      resolve(JSON.parse(data));
-    }
-  });
-};
 
 function defaultSetup(){
   if (!isServer()) {
-    i18next.on("languageChanged", function (lng: string) {
-      if (!i18next.hasResourceBundle(lng, 'translation')) {
-        loadLanguage(lng).then(data => {
-          i18next.addResourceBundle(lng, 'translation', data);
-          i18next.changeLanguage(lng).then(()=>{
-            i18nProxy.changeCurrentLanguage(lng)
-          })
-        });
-        i18next.off('languageChanged');
-      }
+    i18next.on("languageChanged", function(lng: string) {
+       if(lng !== i18nProxy.currentLanguage) {
+              if(!i18next.hasResourceBundle(lng,"translation")){
+                  loadLanguage(lng).then(data=>{
+                      i18next.addResourceBundle(lng, 'translation', data)
+                      i18next.changeLanguage(lng).then(()=>{
+                        i18nProxy.changeCurrentLanguage(i18next.language) 
+                      })
+                  })
+                  
+              }else{
+                  i18nProxy.changeCurrentLanguage(lng) 
+              }
+          }
     });
   }
 }
 
-function parseLanguage(headersData: I18NextHeaders) {
-  const languages = parseLanguageHeader(
-    headersData['accept-language'] || 'zh-CN,zh;q=0.9',
-  );
-  const cookieLanguage = parseLanguageHeaderCookie(
-    headersData.cookie,
-  );
-
-  return cookieLanguage || languages[0];
-}
-
-function setI18nConfiguration(HeadersData?: I18NextHeaders) {
-  if (HeadersData) {
-    (process as ProcessI18NextProxy).I18NextProxy = {
-      severLanguage: parseLanguage(HeadersData),
-    };
-  }
-}
-const loadServerLanguage = async(lng:string)=>{
-  if (lng&&!i18next.hasResourceBundle(lng, 'translation')) {
-    let data = await loadServerLanguageData(lng)
-    i18next.addResourceBundle(lng, 'translation',data)
-}
-  await i18next.changeLanguage(lng)
-  i18nProxy.changeCurrentLanguage(lng)
-}
-
-export function getSeverLanguage() {
-  return (process as ProcessI18NextProxy).I18NextProxy?.severLanguage;
-}
-
-export const withNextServerI18n = (nextAppComponent: {
-  ({ Component, pageProps });
-  getInitialProps?: any;
-}) => {
-
-  const newNextAppComponent:{({ Component, pageProps });getInitialProps?: any;} =(function(_nextAppComponent){
-    return  function(){
-      if(isServer()){
-        const lng =  arguments[0].router.query.i18nextLanguage||i18next.language
-        loadServerLanguage(lng)
-      }
-      return _nextAppComponent.apply(_nextAppComponent, arguments);
-    }
-  }(nextAppComponent))
-  if (nextAppComponent.getInitialProps) {
-    newNextAppComponent.getInitialProps = (function (_getInitialProps: {
-      apply: (
-        arg0: {
-          ({ Component, pageProps });
-          getInitialProps?: any;
-        },
-        arg1: IArguments,
-      ) => void;
-    }) {
-      return function () {
-        const arg = arguments;
-        const HeadersData = arg[0].ctx.req?.headers;
-        setI18nConfiguration(HeadersData);
-        arg[0].ctx.query.i18nextLanguage = getSeverLanguage();
-        return new Promise(resolve => {
-          resolve(_getInitialProps.apply(nextAppComponent, arg));
-        });
-      };
-    })(nextAppComponent.getInitialProps);
-  } else {
-    newNextAppComponent.getInitialProps = async ({
-      Component,
-      ctx,
-    }) => {
-      const HeadersData = ctx.req?.headers;
-      setI18nConfiguration(HeadersData);
-      ctx.query.i18nextLanguage = getSeverLanguage();
-      let pageProps = {};
-      if (Component.getInitialProps) {
-        pageProps = await Component.getInitialProps(ctx);
-      }
-      return { pageProps };
-    };
-  }
-  
-
-  return newNextAppComponent;
-};
-
 export {
   isServer,
+  i18next,
 }
+
 export const t = function (
   key: string | string[],
   defaultValue?: string | undefined,

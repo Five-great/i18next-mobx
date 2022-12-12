@@ -3,6 +3,8 @@
     "compilerOptions": {
       "rootDir": "src",
       "outDir": "dist/esm",
+      "target": "ES6",
+      "module": "ESNext",
       "noEmit": false,
       "declaration": true,
       "declarationMap": true,
